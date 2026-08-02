@@ -4,7 +4,9 @@ import { PatientRow } from './PatientRow'
 type PatientTableProps = {
   patients: Patient[]
   selectedPatientId: string | null
+  deletingPatientId: string | null
   onSelectPatient: (patientId: string) => void
+  onDeletePatient: (patientId: string) => void
   loading: boolean
   error: string | null
 }
@@ -12,7 +14,9 @@ type PatientTableProps = {
 export function PatientTable({
   patients,
   selectedPatientId,
+  deletingPatientId,
   onSelectPatient,
+  onDeletePatient,
   loading,
   error,
 }: PatientTableProps) {
@@ -37,6 +41,9 @@ export function PatientTable({
             <th scope="col">Patient</th>
             <th scope="col">Phone</th>
             <th scope="col">Appointment</th>
+            <th scope="col" className="patient-actions-header">
+              <span className="visually-hidden">Actions</span>
+            </th>
           </tr>
         </thead>
         <tbody>
@@ -45,7 +52,9 @@ export function PatientTable({
               key={patient.id}
               patient={patient}
               selected={patient.id === selectedPatientId}
+              deleting={deletingPatientId === patient.id}
               onSelect={onSelectPatient}
+              onDelete={onDeletePatient}
             />
           ))}
         </tbody>
