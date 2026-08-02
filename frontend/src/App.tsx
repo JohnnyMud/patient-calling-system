@@ -184,12 +184,18 @@ function App() {
     })
 
     socket.addEventListener('message', (event) => {
-      const message = JSON.parse(event.data as string) as TranscriptSocketEvent
+      let message: TranscriptSocketEvent
+      try {
+        message = JSON.parse(event.data as string) as TranscriptSocketEvent
+      } catch {
+        return
+      }
+
       if (isTranscriptSnapshot(message)) {
         setTranscriptMessages(message.messages)
       } else if (isEmergencyStatus(message)) {
         setIsEmergency(message.is_emergency)
-      } else {
+      } else if ('role' in message && 'content' in message) {
         setTranscriptMessages((current) => [...current, message])
       }
     })

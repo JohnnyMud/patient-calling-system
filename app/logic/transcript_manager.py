@@ -139,31 +139,38 @@ class TranscriptManager:
 
     def persist(self, call_id: str, db: Session) -> None:
         messages = self._messages.get(call_id, [])
-        if not messages:
-            return
+        try:
+            if not messages:
+                return
 
-        call_attempt = (
-            db.query(CallAttempts)
-            .filter(CallAttempts.retell_call_id == call_id)
-            .first()
-        )
-        if call_attempt is None:
-            return
-
-        transcript_text = json.dumps(messages)
-        transcript = db.query(Transcripts).filter(Transcripts.call_id == call_id).first()
-        if transcript is None:
-            transcript = Transcripts(
-                call_id=call_id,
-                patient_id=call_attempt.patient_id,
-                transcript=transcript_text,
+            call_attempt = (
+                db.query(CallAttempts)
+                .filter(CallAttempts.retell_call_id == call_id)
+                .first()
             )
-            db.add(transcript)
-        else:
-            transcript.patient_id = call_attempt.patient_id
-            transcript.transcript = transcript_text
+            if call_attempt is None:
+                return
 
-        db.commit()
+            transcript_text = json.dumps(messages)
+            transcript = (
+                db.query(Transcripts).filter(Transcripts.call_id == call_id).first()
+            )
+            if transcript is None:
+                transcript = Transcripts(
+                    call_id=call_id,
+                    patient_id=call_attempt.patient_id,
+                    transcript=transcript_text,
+                )
+                db.add(transcript)
+            else:
+                transcript.patient_id = call_attempt.patient_id
+                transcript.transcript = transcript_text
+
+            db.commit()
+        finally:
+            # Call has ended; drop in-memory state so it cannot grow unbounded.
+            self._messages.pop(call_id, None)
+            self._emergency_status.pop(call_id, None)
 
 
 transcript_manager = TranscriptManager()

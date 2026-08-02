@@ -12,7 +12,11 @@ from app.logic.transcript_manager import transcript_manager
 router = APIRouter(prefix="/websocket", tags=["websocket"])
 
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-5.1")
-OPENAI_SYSTEM_PROMPT = ("You are a helpful medical assistant that can answer questions and help with tasks. Remind the patient of their upcoming appointment tommorow")
+OPENAI_EMERGENCY_MODEL = os.getenv("OPENAI_EMERGENCY_MODEL", OPENAI_MODEL)
+OPENAI_SYSTEM_PROMPT = (
+    "You are a helpful, concise phone agent for patient appointment reminder "
+    "calls. Keep responses brief, natural, and easy to understand over the phone."
+)
 EMERGENCY_DETECTOR_PROMPT = (
     "Determine whether the patient is currently describing a medical emergency "
     "that needs immediate help. Examples include severe chest pain, trouble "
@@ -114,6 +118,9 @@ async def generate_openai_response(messages: list[dict[str, str]]) -> str:
 
 
 async def detect_emergency(messages: list[dict[str, str]]) -> bool:
+    if not any(message.get("role") == "user" for message in messages):
+        return False
+
     try:
         return await asyncio.to_thread(detect_emergency_sync, messages)
     except Exception as exc:
@@ -130,7 +137,7 @@ def detect_emergency_sync(messages: list[dict[str, str]]) -> bool:
     }
     body = json.dumps(
         {
-            "model": OPENAI_MODEL,
+            "model": OPENAI_EMERGENCY_MODEL,
             "instructions": EMERGENCY_DETECTOR_PROMPT,
             "input": messages,
             "max_output_tokens": 50,
@@ -165,7 +172,11 @@ def detect_emergency_sync(messages: list[dict[str, str]]) -> bool:
         error_body = exc.read().decode("utf-8")
         raise RuntimeError(f"OpenAI emergency detector error: {error_body}") from exc
 
-    result = json.loads(extract_openai_text(data))
+    raw_text = extract_openai_text(data)
+    if not raw_text:
+        raise ValueError("Emergency detector returned an empty response")
+
+    result = json.loads(raw_text)
     is_emergency = result.get("is_emergency")
     if not isinstance(is_emergency, bool):
         raise ValueError("Emergency detector returned an invalid schema")
@@ -250,7 +261,6 @@ async def retell_agent_websocket(websocket: WebSocket, call_id: str):
         while True:
             message = await websocket.receive_text()
             request = json.loads(message)
-            print(request)
             transcript = request.get("transcript")
             if isinstance(transcript, list):
                 await transcript_manager.replace_transcript(call_id, transcript)
