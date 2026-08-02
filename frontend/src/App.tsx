@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import {
   createTranscriptSocket,
   createCall,
+  deletePatient,
   fetchPatients,
   fetchCallRecords,
   isEmergencyStatus,
@@ -21,6 +22,7 @@ function App() {
   const [callAttempts, setCallAttempts] = useState<CallAttempt[]>([])
   const [loadingPatients, setLoadingPatients] = useState(true)
   const [patientsError, setPatientsError] = useState<string | null>(null)
+  const [deletingPatientId, setDeletingPatientId] = useState<string | null>(null)
   const [startingCall, setStartingCall] = useState(false)
   const [activeTranscriptCallId, setActiveTranscriptCallId] = useState<string | null>(null)
   const [transcriptMessages, setTranscriptMessages] = useState<TranscriptMessage[]>([])
@@ -108,6 +110,26 @@ function App() {
       cancelled = true
     }
   }, [selectedPatientId, selectedPatient])
+
+  async function handleDeletePatient(patientId: string) {
+    setDeletingPatientId(patientId)
+    setPatientsError(null)
+
+    try {
+      await deletePatient(patientId)
+      setPatients((current) => current.filter((patient) => patient.id !== patientId))
+      if (selectedPatientId === patientId) {
+        setSelectedPatientId(null)
+        setCallAttempts([])
+      }
+    } catch (error) {
+      setPatientsError(
+        error instanceof Error ? error.message : 'Failed to delete patient',
+      )
+    } finally {
+      setDeletingPatientId(null)
+    }
+  }
 
   async function handleStartCall() {
     if (!selectedPatient) {
@@ -247,7 +269,9 @@ function App() {
         <PatientTable
           patients={patients}
           selectedPatientId={selectedPatientId}
+          deletingPatientId={deletingPatientId}
           onSelectPatient={setSelectedPatientId}
+          onDeletePatient={(patientId) => void handleDeletePatient(patientId)}
           loading={loadingPatients}
           error={patientsError}
         />

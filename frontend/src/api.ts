@@ -123,6 +123,16 @@ export async function createCall(patientId: string): Promise<CallRecord> {
   return response.json() as Promise<CallRecord>
 }
 
+export async function deletePatient(patientId: string): Promise<void> {
+  const response = await fetch(`${API_BASE}/patients/${patientId}`, {
+    method: 'DELETE',
+  })
+
+  if (!response.ok) {
+    throw new Error(await parseError(response))
+  }
+}
+
 export function createTranscriptSocket(callId: string): WebSocket {
   return new WebSocket(`${WS_BASE}/websocket/live-transcript/${callId}`)
 }
