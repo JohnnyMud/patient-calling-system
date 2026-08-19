@@ -59,11 +59,22 @@ export type TranscriptSocketEvent =
       type: 'transcript_snapshot'
       messages: TranscriptMessage[]
     }
+  | {
+      call_id: string
+      type: 'emergency_status'
+      is_emergency: boolean
+    }
 
 export function isTranscriptSnapshot(
   event: TranscriptSocketEvent,
 ): event is Extract<TranscriptSocketEvent, { type: 'transcript_snapshot' }> {
   return 'type' in event && event.type === 'transcript_snapshot'
+}
+
+export function isEmergencyStatus(
+  event: TranscriptSocketEvent,
+): event is Extract<TranscriptSocketEvent, { type: 'emergency_status' }> {
+  return 'type' in event && event.type === 'emergency_status'
 }
 
 async function parseError(response: Response): Promise<string> {
@@ -110,6 +121,16 @@ export async function createCall(patientId: string): Promise<CallRecord> {
   }
 
   return response.json() as Promise<CallRecord>
+}
+
+export async function deletePatient(patientId: string): Promise<void> {
+  const response = await fetch(`${API_BASE}/patients/${patientId}`, {
+    method: 'DELETE',
+  })
+
+  if (!response.ok) {
+    throw new Error(await parseError(response))
+  }
 }
 
 export function createTranscriptSocket(callId: string): WebSocket {

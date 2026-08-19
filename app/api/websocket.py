@@ -1,5 +1,6 @@
 import asyncio
 import json
+import logging
 import os
 from pathlib import Path
 from urllib import error, request
@@ -9,12 +10,22 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from app.db import SessionLocal
 from app.logic.transcript_manager import transcript_manager
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/websocket", tags=["websocket"])
 
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-5.1")
+OPENAI_EMERGENCY_MODEL = os.getenv("OPENAI_EMERGENCY_MODEL", OPENAI_MODEL)
 OPENAI_SYSTEM_PROMPT = (
     "You are a helpful, concise phone agent for patient appointment reminder "
     "calls. Keep responses brief, natural, and easy to understand over the phone."
+)
+EMERGENCY_DETECTOR_PROMPT = (
+    "Determine whether the patient is currently describing a medical emergency "
+    "that needs immediate help. Examples include severe chest pain, trouble "
+    "breathing, stroke symptoms, uncontrolled bleeding, loss of consciousness, "
+    "overdose, or immediate risk of self-harm. Use the full conversation for "
+    "context. Do not classify routine symptoms, scheduling questions, or past "
+    "resolved events as current emergencies."
 )
 
 
@@ -108,6 +119,72 @@ async def generate_openai_response(messages: list[dict[str, str]]) -> str:
     return await asyncio.to_thread(generate_openai_response_sync, messages)
 
 
+async def detect_emergency(messages: list[dict[str, str]]) -> bool:
+    if not any(message.get("role") == "user" for message in messages):
+        return False
+
+    try:
+        return await asyncio.to_thread(detect_emergency_sync, messages)
+    except Exception:
+        logger.exception("Emergency detection failed")
+        return False
+
+
+def detect_emergency_sync(messages: list[dict[str, str]]) -> bool:
+    api_key = load_openai_api_key()
+    url = "https://api.openai.com/v1/responses"
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+    }
+    body = json.dumps(
+        {
+            "model": OPENAI_EMERGENCY_MODEL,
+            "instructions": EMERGENCY_DETECTOR_PROMPT,
+            "input": messages,
+            "max_output_tokens": 50,
+            "text": {
+                "format": {
+                    "type": "json_schema",
+                    "name": "emergency_detection",
+                    "strict": True,
+                    "schema": {
+                        "type": "object",
+                        "properties": {
+                            "is_emergency": {"type": "boolean"},
+                        },
+                        "required": ["is_emergency"],
+                        "additionalProperties": False,
+                    },
+                }
+            },
+        }
+    ).encode("utf-8")
+    openai_request = request.Request(
+        url,
+        data=body,
+        headers=headers,
+        method="POST",
+    )
+
+    try:
+        with request.urlopen(openai_request, timeout=20) as response:
+            data = json.loads(response.read().decode("utf-8"))
+    except error.HTTPError as exc:
+        error_body = exc.read().decode("utf-8")
+        raise RuntimeError(f"OpenAI emergency detector error: {error_body}") from exc
+
+    raw_text = extract_openai_text(data)
+    if not raw_text:
+        raise ValueError("Emergency detector returned an empty response")
+
+    result = json.loads(raw_text)
+    is_emergency = result.get("is_emergency")
+    if not isinstance(is_emergency, bool):
+        raise ValueError("Emergency detector returned an invalid schema")
+    return is_emergency
+
+
 def generate_openai_response_sync(messages: list[dict[str, str]]) -> str:
     api_key = load_openai_api_key()
     url = "https://api.openai.com/v1/responses"
@@ -186,7 +263,6 @@ async def retell_agent_websocket(websocket: WebSocket, call_id: str):
         while True:
             message = await websocket.receive_text()
             request = json.loads(message)
-            print(request)
             transcript = request.get("transcript")
             if isinstance(transcript, list):
                 await transcript_manager.replace_transcript(call_id, transcript)
@@ -201,7 +277,11 @@ async def retell_agent_websocket(websocket: WebSocket, call_id: str):
 
             if is_response_required(request):
                 messages = extract_transcript_messages(request)
-                response_content = await generate_openai_response(messages)
+                response_content, is_emergency = await asyncio.gather(
+                    generate_openai_response(messages),
+                    detect_emergency(messages),
+                )
+                await transcript_manager.set_emergency(call_id, is_emergency)
                 response_event = {
                     "response_id": request.get("response_id"),
                     "content": response_content,
@@ -233,8 +313,3 @@ async def live_transcript(websocket: WebSocket, call_id: str):
             await websocket.receive_text()
     except WebSocketDisconnect:
         transcript_manager.disconnect(call_id, websocket)
-
-
-@router.websocket("/agent-websocket/{call_id}")
-async def agent_websocket(websocket: WebSocket, call_id: str):
-    await retell_agent_websocket(websocket, call_id)

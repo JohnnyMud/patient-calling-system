@@ -59,7 +59,7 @@ start_postgres_if_configured() {
   fi
 
   if docker compose config --services >/dev/null 2>&1; then
-    if docker compose config --services | awk '/^postgres$/{found=1} END{exit !found}'; then
+    if docker compose config --services | awk '/^db$/{found=1} END{exit !found}'; then
       echo "Starting docker compose service: db"
       docker compose up -d db
       return 0

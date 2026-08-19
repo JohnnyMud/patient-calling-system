@@ -2,8 +2,10 @@ import { useEffect, useState } from 'react'
 import {
   createTranscriptSocket,
   createCall,
+  deletePatient,
   fetchPatients,
   fetchCallRecords,
+  isEmergencyStatus,
   isTranscriptSnapshot,
   type CallAttempt,
   type Patient,
@@ -20,9 +22,11 @@ function App() {
   const [callAttempts, setCallAttempts] = useState<CallAttempt[]>([])
   const [loadingPatients, setLoadingPatients] = useState(true)
   const [patientsError, setPatientsError] = useState<string | null>(null)
+  const [deletingPatientId, setDeletingPatientId] = useState<string | null>(null)
   const [startingCall, setStartingCall] = useState(false)
   const [activeTranscriptCallId, setActiveTranscriptCallId] = useState<string | null>(null)
   const [transcriptMessages, setTranscriptMessages] = useState<TranscriptMessage[]>([])
+  const [isEmergency, setIsEmergency] = useState(false)
   const [transcriptStatus, setTranscriptStatus] = useState<
     'idle' | 'connecting' | 'connected' | 'closed' | 'error'
   >('idle')
@@ -107,6 +111,26 @@ function App() {
     }
   }, [selectedPatientId, selectedPatient])
 
+  async function handleDeletePatient(patientId: string) {
+    setDeletingPatientId(patientId)
+    setPatientsError(null)
+
+    try {
+      await deletePatient(patientId)
+      setPatients((current) => current.filter((patient) => patient.id !== patientId))
+      if (selectedPatientId === patientId) {
+        setSelectedPatientId(null)
+        setCallAttempts([])
+      }
+    } catch (error) {
+      setPatientsError(
+        error instanceof Error ? error.message : 'Failed to delete patient',
+      )
+    } finally {
+      setDeletingPatientId(null)
+    }
+  }
+
   async function handleStartCall() {
     if (!selectedPatient) {
       return
@@ -166,11 +190,13 @@ function App() {
   useEffect(() => {
     if (!activeTranscriptCallId) {
       setTranscriptMessages([])
+      setIsEmergency(false)
       setTranscriptStatus('idle')
       return
     }
 
     setTranscriptMessages([])
+    setIsEmergency(false)
     setTranscriptStatus('connecting')
 
     const socket = createTranscriptSocket(activeTranscriptCallId)
@@ -180,10 +206,18 @@ function App() {
     })
 
     socket.addEventListener('message', (event) => {
-      const message = JSON.parse(event.data as string) as TranscriptSocketEvent
+      let message: TranscriptSocketEvent
+      try {
+        message = JSON.parse(event.data as string) as TranscriptSocketEvent
+      } catch {
+        return
+      }
+
       if (isTranscriptSnapshot(message)) {
         setTranscriptMessages(message.messages)
-      } else {
+      } else if (isEmergencyStatus(message)) {
+        setIsEmergency(message.is_emergency)
+      } else if ('role' in message && 'content' in message) {
         setTranscriptMessages((current) => [...current, message])
       }
     })
@@ -235,7 +269,9 @@ function App() {
         <PatientTable
           patients={patients}
           selectedPatientId={selectedPatientId}
+          deletingPatientId={deletingPatientId}
           onSelectPatient={setSelectedPatientId}
+          onDeletePatient={(patientId) => void handleDeletePatient(patientId)}
           loading={loadingPatients}
           error={patientsError}
         />
@@ -245,6 +281,7 @@ function App() {
         callId={activeTranscriptCallId}
         messages={transcriptMessages}
         status={transcriptStatus}
+        isEmergency={isEmergency}
       />
 
       <CallHistory attempts={callAttempts} />
