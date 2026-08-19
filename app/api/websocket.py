@@ -1,5 +1,6 @@
 import asyncio
 import json
+import logging
 import os
 from pathlib import Path
 from urllib import error, request
@@ -9,6 +10,7 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from app.db import SessionLocal
 from app.logic.transcript_manager import transcript_manager
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/websocket", tags=["websocket"])
 
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-5.1")
@@ -123,8 +125,8 @@ async def detect_emergency(messages: list[dict[str, str]]) -> bool:
 
     try:
         return await asyncio.to_thread(detect_emergency_sync, messages)
-    except Exception as exc:
-        print(f"Emergency detection failed: {exc}")
+    except Exception:
+        logger.exception("Emergency detection failed")
         return False
 
 
@@ -311,8 +313,3 @@ async def live_transcript(websocket: WebSocket, call_id: str):
             await websocket.receive_text()
     except WebSocketDisconnect:
         transcript_manager.disconnect(call_id, websocket)
-
-
-@router.websocket("/agent-websocket/{call_id}")
-async def agent_websocket(websocket: WebSocket, call_id: str):
-    await retell_agent_websocket(websocket, call_id)
