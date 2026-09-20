@@ -136,3 +136,32 @@ export async function deletePatient(patientId: string): Promise<void> {
 export function createTranscriptSocket(callId: string): WebSocket {
   return new WebSocket(`${WS_BASE}/websocket/live-transcript/${callId}`)
 }
+
+export type PatientCreatePayload = {
+  first_name: string
+  last_name: string
+  date_of_birth: string
+  phone_number: string
+  home_address: string
+  insurance_number: string
+  medical_record_number: string
+  appointment_date: string
+  appointment_time: string
+  timezone: string
+}
+
+export async function createPatient(payload: PatientCreatePayload): Promise<Patient> {
+  const response = await fetch(`${API_BASE}/patients`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  })
+
+  if (!response.ok) {
+    throw new Error(await parseError(response))
+  }
+
+  return response.json() as Promise<Patient>
+}

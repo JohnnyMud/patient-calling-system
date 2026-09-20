@@ -12,6 +12,7 @@ import {
   type TranscriptMessage,
   type TranscriptSocketEvent,
 } from './api'
+import { AddPatientModal } from './components/AddPatientModal'
 import { CallHistory } from './components/CallHistory'
 import { LiveTranscript } from './components/LiveTranscript'
 import { PatientTable } from './components/PatientTable'
@@ -23,6 +24,7 @@ function App() {
   const [loadingPatients, setLoadingPatients] = useState(true)
   const [patientsError, setPatientsError] = useState<string | null>(null)
   const [deletingPatientId, setDeletingPatientId] = useState<string | null>(null)
+  const [addPatientOpen, setAddPatientOpen] = useState(false)
   const [startingCall, setStartingCall] = useState(false)
   const [activeTranscriptCallId, setActiveTranscriptCallId] = useState<string | null>(null)
   const [transcriptMessages, setTranscriptMessages] = useState<TranscriptMessage[]>([])
@@ -257,13 +259,22 @@ function App() {
       </header>
 
       <section className="panel">
-        <div className="panel-header">
-          <h2>Patient List</h2>
-          <p>
-            {selectedPatient
-              ? `Selected: ${selectedPatient.first_name} ${selectedPatient.last_name}`
-              : 'Select a patient to enable Start Call.'}
-          </p>
+        <div className="panel-header panel-header-row">
+          <div>
+            <h2>Patient List</h2>
+            <p>
+              {selectedPatient
+                ? `Selected: ${selectedPatient.first_name} ${selectedPatient.last_name}`
+                : 'Select a patient to enable Start Call.'}
+            </p>
+          </div>
+          <button
+            type="button"
+            className="primary-button"
+            onClick={() => setAddPatientOpen(true)}
+          >
+            Add Patient
+          </button>
         </div>
 
         <PatientTable
@@ -276,6 +287,15 @@ function App() {
           error={patientsError}
         />
       </section>
+
+      <AddPatientModal
+        open={addPatientOpen}
+        onClose={() => setAddPatientOpen(false)}
+        onCreated={(patient) => {
+          setPatients((current) => [...current, patient])
+          setSelectedPatientId(patient.id)
+        }}
+      />
 
       <LiveTranscript
         callId={activeTranscriptCallId}
