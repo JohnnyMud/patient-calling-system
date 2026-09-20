@@ -1,20 +1,16 @@
 import asyncio
 import json
 import logging
-import os
-from pathlib import Path
-from urllib import error, request
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from app.db import SessionLocal
+from app.llm.factory import get_llm_provider
 from app.logic.transcript_manager import transcript_manager
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/websocket", tags=["websocket"])
 
-OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-5.1")
-OPENAI_EMERGENCY_MODEL = os.getenv("OPENAI_EMERGENCY_MODEL", OPENAI_MODEL)
 OPENAI_SYSTEM_PROMPT = (
     "You are a helpful, concise phone agent for patient appointment reminder "
     "calls. Keep responses brief, natural, and easy to understand over the phone."
@@ -61,24 +57,6 @@ def is_response_required(payload: dict) -> bool:
     return payload.get("interaction_type") == "response_required"
 
 
-def load_openai_api_key() -> str:
-    api_key = os.getenv("OPENAI_API_KEY")
-    if api_key:
-        return api_key
-
-    env_path = Path(__file__).resolve().parents[2] / ".env"
-    if env_path.exists():
-        for line in env_path.read_text().splitlines():
-            key, separator, value = line.partition("=")
-            if separator and key.strip() == "OPENAI_API_KEY":
-                api_key = value.strip().strip("\"'")
-                if api_key:
-                    os.environ["OPENAI_API_KEY"] = api_key
-                    return api_key
-
-    raise RuntimeError("OPENAI_API_KEY is not configured")
-
-
 def normalize_transcript_role(raw_role: str | None) -> str:
     role = str(raw_role or "agent").lower()
     if role in {"user", "patient", "caller"}:
@@ -115,8 +93,18 @@ def extract_transcript_messages(payload: dict) -> list[dict[str, str]]:
     return messages
 
 
-async def generate_openai_response(messages: list[dict[str, str]]) -> str:
-    return await asyncio.to_thread(generate_openai_response_sync, messages)
+def generate_reply_sync(messages: list[dict[str, str]]) -> str:
+    provider = get_llm_provider()
+    return provider.generate_reply(messages, OPENAI_SYSTEM_PROMPT)
+
+
+def detect_emergency_sync(messages: list[dict[str, str]]) -> bool:
+    provider = get_llm_provider()
+    return provider.detect_emergency(messages, EMERGENCY_DETECTOR_PROMPT)
+
+
+async def generate_agent_response(messages: list[dict[str, str]]) -> str:
+    return await asyncio.to_thread(generate_reply_sync, messages)
 
 
 async def detect_emergency(messages: list[dict[str, str]]) -> bool:
@@ -128,123 +116,6 @@ async def detect_emergency(messages: list[dict[str, str]]) -> bool:
     except Exception:
         logger.exception("Emergency detection failed")
         return False
-
-
-def detect_emergency_sync(messages: list[dict[str, str]]) -> bool:
-    api_key = load_openai_api_key()
-    url = "https://api.openai.com/v1/responses"
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json",
-    }
-    body = json.dumps(
-        {
-            "model": OPENAI_EMERGENCY_MODEL,
-            "instructions": EMERGENCY_DETECTOR_PROMPT,
-            "input": messages,
-            "max_output_tokens": 50,
-            "text": {
-                "format": {
-                    "type": "json_schema",
-                    "name": "emergency_detection",
-                    "strict": True,
-                    "schema": {
-                        "type": "object",
-                        "properties": {
-                            "is_emergency": {"type": "boolean"},
-                        },
-                        "required": ["is_emergency"],
-                        "additionalProperties": False,
-                    },
-                }
-            },
-        }
-    ).encode("utf-8")
-    openai_request = request.Request(
-        url,
-        data=body,
-        headers=headers,
-        method="POST",
-    )
-
-    try:
-        with request.urlopen(openai_request, timeout=20) as response:
-            data = json.loads(response.read().decode("utf-8"))
-    except error.HTTPError as exc:
-        error_body = exc.read().decode("utf-8")
-        raise RuntimeError(f"OpenAI emergency detector error: {error_body}") from exc
-
-    raw_text = extract_openai_text(data)
-    if not raw_text:
-        raise ValueError("Emergency detector returned an empty response")
-
-    result = json.loads(raw_text)
-    is_emergency = result.get("is_emergency")
-    if not isinstance(is_emergency, bool):
-        raise ValueError("Emergency detector returned an invalid schema")
-    return is_emergency
-
-
-def generate_openai_response_sync(messages: list[dict[str, str]]) -> str:
-    api_key = load_openai_api_key()
-    url = "https://api.openai.com/v1/responses"
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json",
-    }
-
-    body = json.dumps(
-        {
-            "model": OPENAI_MODEL,
-            "instructions": OPENAI_SYSTEM_PROMPT,
-            "input": messages,
-            "max_output_tokens": 120,
-        }
-    ).encode("utf-8")
-
-    openai_request = request.Request(
-        url,
-        data=body,
-        headers=headers,
-        method="POST",
-    )
-
-    try:
-        with request.urlopen(openai_request, timeout=20) as response:
-            data = json.loads(response.read().decode("utf-8"))
-    except error.HTTPError as exc:
-        error_body = exc.read().decode("utf-8")
-        raise RuntimeError(f"OpenAI API error: {error_body}") from exc
-
-    response = extract_openai_text(data)
-    return response or "I am sorry, I did not catch that. Could you repeat it?"
-
-
-def extract_openai_text(payload: dict) -> str:
-    output_text = payload.get("output_text")
-    if isinstance(output_text, str):
-        return output_text.strip()
-
-    chunks: list[str] = []
-    output = payload.get("output")
-    if isinstance(output, list):
-        for item in output:
-            if not isinstance(item, dict):
-                continue
-
-            content = item.get("content")
-            if not isinstance(content, list):
-                continue
-
-            for content_item in content:
-                if not isinstance(content_item, dict):
-                    continue
-
-                text = content_item.get("text")
-                if isinstance(text, str):
-                    chunks.append(text)
-
-    return "".join(chunks).strip()
 
 
 async def retell_agent_websocket(websocket: WebSocket, call_id: str):
@@ -278,7 +149,7 @@ async def retell_agent_websocket(websocket: WebSocket, call_id: str):
             if is_response_required(request):
                 messages = extract_transcript_messages(request)
                 response_content, is_emergency = await asyncio.gather(
-                    generate_openai_response(messages),
+                    generate_agent_response(messages),
                     detect_emergency(messages),
                 )
                 await transcript_manager.set_emergency(call_id, is_emergency)

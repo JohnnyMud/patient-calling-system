@@ -53,3 +53,15 @@ class Transcripts(Base):
     call_id: Mapped[str] = mapped_column(primary_key=True)
     patient_id: Mapped[str] = mapped_column(ForeignKey("patients.id", ondelete="CASCADE"))
     transcript: Mapped[str] = mapped_column(Text)
+
+
+class LlmSettings(Base):
+    """Singleton row for LLM provider credentials and model selection."""
+
+    __tablename__ = "llm_settings"
+
+    id: Mapped[str] = mapped_column(primary_key=True)
+    provider: Mapped[str]
+    api_key: Mapped[str | None] = mapped_column(Text, nullable=True)
+    model: Mapped[str]
+    updated_at: Mapped[datetime]

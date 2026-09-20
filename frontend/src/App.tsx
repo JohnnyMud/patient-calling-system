@@ -14,6 +14,7 @@ import {
 } from './api'
 import { CallHistory } from './components/CallHistory'
 import { LiveTranscript } from './components/LiveTranscript'
+import { LlmSettingsModal } from './components/LlmSettingsModal'
 import { PatientTable } from './components/PatientTable'
 
 function App() {
@@ -24,6 +25,7 @@ function App() {
   const [patientsError, setPatientsError] = useState<string | null>(null)
   const [deletingPatientId, setDeletingPatientId] = useState<string | null>(null)
   const [startingCall, setStartingCall] = useState(false)
+  const [settingsOpen, setSettingsOpen] = useState(false)
   const [activeTranscriptCallId, setActiveTranscriptCallId] = useState<string | null>(null)
   const [transcriptMessages, setTranscriptMessages] = useState<TranscriptMessage[]>([])
   const [isEmergency, setIsEmergency] = useState(false)
@@ -246,14 +248,23 @@ function App() {
           </p>
         </div>
 
-        <button
-          type="button"
-          className="primary-button"
-          disabled={!selectedPatient || startingCall}
-          onClick={() => void handleStartCall()}
-        >
-          {startingCall ? 'Starting Call...' : 'Start Call'}
-        </button>
+        <div className="header-actions">
+          <button
+            type="button"
+            className="secondary-button"
+            onClick={() => setSettingsOpen(true)}
+          >
+            Settings
+          </button>
+          <button
+            type="button"
+            className="primary-button"
+            disabled={!selectedPatient || startingCall}
+            onClick={() => void handleStartCall()}
+          >
+            {startingCall ? 'Starting Call...' : 'Start Call'}
+          </button>
+        </div>
       </header>
 
       <section className="panel">
@@ -285,6 +296,8 @@ function App() {
       />
 
       <CallHistory attempts={callAttempts} />
+
+      <LlmSettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
     </main>
   )
 }

@@ -1,9 +1,9 @@
 from app.api.websocket import (
-    extract_openai_text,
     extract_transcript_message,
     extract_transcript_messages,
     should_persist_transcript,
 )
+from app.llm.openai_provider import extract_openai_text
 
 
 def test_extract_transcript_messages_from_list():

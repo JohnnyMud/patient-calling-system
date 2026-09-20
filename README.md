@@ -22,7 +22,7 @@ flowchart LR
   API --> Retell[Retell phone calls]
   Retell --> Webhook[Call webhooks]
   Retell --> LLMWS[Custom LLM websocket]
-  LLMWS --> OpenAI[OpenAI agent plus emergency check]
+  LLMWS --> LLM[OpenAI or Gemini agent plus emergency check]
   LLMWS --> LiveWS[Live transcript websocket]
   LiveWS --> UI
   Webhook --> DB
@@ -32,7 +32,7 @@ flowchart LR
 - **API:** FastAPI, SQLAlchemy, Alembic
 - **Database:** PostgreSQL
 - **Voice:** Retell
-- **Agent:** OpenAI Responses API
+- **Agent:** Pluggable LLM providers (OpenAI Responses API or Gemini `generateContent`)
 
 ## Quickstart
 
@@ -63,6 +63,8 @@ cp .env.example .env
 ```
 
 `RETELL_AGENT_ID` should include the `agent_` prefix. `RETELL_FROM_NUMBER` is the provisioned caller ID. `TEST_NUMBER` is the phone number used for the one callable demo patient (Ava Thompson) when you run the seed script.
+
+LLM provider defaults to OpenAI (`LLM_PROVIDER=openai`, `OPENAI_MODEL=gpt-5.1`). To use Gemini instead, set `LLM_PROVIDER=gemini` plus `GEMINI_API_KEY` and optionally `GEMINI_MODEL` (default `gemini-2.0-flash`). You can also change provider, model, and API key from the portal **Settings** dialog; values are stored in a singleton `llm_settings` row and fall back to these env vars when empty.
 
 If you change database credentials, set `DATABASE_URL` to match. The default is:
 
@@ -160,7 +162,8 @@ A short screen recording of a live call is the best walkthrough. See [docs/demo.
 ## Known limitations
 
 - There is no authentication. Do not expose this app on a public network.
-- Placing a real call requires Retell and OpenAI credentials plus a provisioned caller ID.
+- LLM API keys may be stored in plaintext in Postgres via Settings. Treat this as a local/demo convenience only.
+- Placing a real call requires Retell and an LLM provider key (OpenAI or Gemini) plus a provisioned caller ID.
 - All bundled data is synthetic. Never load real patient information.
 - Emergency detection is a model classification for the operator UI, not a medical device.
 

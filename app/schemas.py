@@ -48,3 +48,17 @@ class CallResponse(BaseModel):
     successful: bool | None
     recording_url: str | None
     summary: str | None
+
+
+class LlmSettingsRead(BaseModel):
+    provider: str
+    model: str
+    api_key_set: bool
+    api_key_last4: str | None = None
+    updated_at: datetime | None = None
+
+
+class LlmSettingsUpdate(BaseModel):
+    provider: str | None = None
+    model: str | None = None
+    api_key: str | None = None
