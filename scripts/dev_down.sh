@@ -2,7 +2,10 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-RUNTIME_DIR="${SCRIPT_DIR}/../.runtime"
+# shellcheck source=dev_lib.sh
+source "${SCRIPT_DIR}/dev_lib.sh"
+init_dev_env
+
 STOP_DOCKER_DB_ON_DOWN="${STOP_DOCKER_DB_ON_DOWN:-0}"
 
 stop_pid() {
@@ -79,7 +82,8 @@ stop_by_pattern() {
   if ! command -v pkill >/dev/null 2>&1; then
     return 0
   fi
-  if pkill -f "${pattern}" 2>/dev/null; then
+  if pgrep -f "${pattern}" >/dev/null 2>&1; then
+    pkill -f "${pattern}" 2>/dev/null || true
     echo "${name}: stopped fallback process(es) via pattern"
   fi
 }

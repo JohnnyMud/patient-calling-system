@@ -2,7 +2,9 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-RUNTIME_DIR="${SCRIPT_DIR}/../.runtime"
+# shellcheck source=dev_lib.sh
+source "${SCRIPT_DIR}/dev_lib.sh"
+init_dev_env
 mkdir -p "${RUNTIME_DIR}"
 
 BACKEND_LOG="${RUNTIME_DIR}/backend.log"
@@ -25,7 +27,7 @@ ensure_not_running() {
     pid="$(cat "${pid_file}")"
     if kill -0 "${pid}" 2>/dev/null; then
       echo "${name} appears to already be running (pid ${pid})."
-      echo "Run dev_down.sh first or remove stale pid files."
+      echo "Run 'make down' first or remove stale pid files in ${RUNTIME_DIR}."
       exit 1
     fi
     rm -f "${pid_file}"
@@ -117,7 +119,7 @@ if [[ "${AUTO_UPDATE_RETELL_WEBHOOK}" == "1" ]]; then
 else
   echo "Retell update skipped (AUTO_UPDATE_RETELL_WEBHOOK=0)."
   echo "Run manually:"
-  echo "  ${SCRIPT_DIR}/update_retell_webhook.py --tunnel-url ${TUNNEL_URL} --apply"
+  echo "  make webhook TUNNEL_URL=${TUNNEL_URL}"
 fi
 
 echo "Environment ready."

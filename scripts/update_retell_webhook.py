@@ -3,6 +3,21 @@ import json
 import os
 import sys
 import argparse
+from pathlib import Path
+
+
+def load_dotenv() -> None:
+    env_path = Path(__file__).resolve().parent.parent / ".env"
+    if not env_path.is_file():
+        return
+    for raw in env_path.read_text().splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        key = key.strip()
+        value = value.strip().strip("'").strip('"')
+        os.environ.setdefault(key, value)
 
 
 def build_webhook_url(args: argparse.Namespace) -> str:
@@ -17,6 +32,7 @@ def print_json(payload: dict) -> None:
 
 
 def main() -> int:
+    load_dotenv()
     parser = argparse.ArgumentParser(
         description="Update Retell webhook URL for local development."
     )

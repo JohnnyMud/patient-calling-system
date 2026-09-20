@@ -50,9 +50,10 @@ flowchart LR
 ```bash
 git clone https://github.com/JohnnyMud/patient-calling-system.git
 cd patient-calling-system
-uv sync
-cd frontend && npm install && cd ..
+make install
 ```
+
+`make help` lists all targets. Scripts load `.env` and the project virtualenv automatically.
 
 ### 2. Configure environment
 
@@ -71,66 +72,57 @@ If you change database credentials, set `DATABASE_URL` to match. The default is:
 ### 3. Start PostgreSQL and migrate
 
 ```bash
-docker compose up -d db
-uv run alembic upgrade head
+make db
+make migrate
 ```
 
 ### 4. Seed demo data
 
 ```bash
-uv run python scripts/seed_demo.py
+make seed
 ```
 
 To wipe previous demo rows and reseed:
 
 ```bash
-uv run python scripts/seed_demo.py --reset
+make seed-reset
 ```
 
 Demo patients use medical record numbers prefixed with `DEMO-`. The script only creates or deletes those rows, so hand-entered data is left alone. Other patients use fictional `555` numbers.
 
 ### 5. Start the app
 
-**Option A (recommended):** use the bundled startup scripts
-
 ```bash
-set -a && source .env && set +a
-PATH="$(pwd)/.venv/bin:$PATH" ./.cursor/skills/dev_environment/scripts/dev_up.sh
+make up
 ```
 
-This starts backend, frontend, and tunnel, then waits for health checks.
+This starts Postgres (if needed), backend, frontend, and the Cloudflare tunnel, then waits for the backend health check. Logs and PID files go in `.runtime/`.
 
-**Option B:** start services manually in separate terminals
+To run a single service in the foreground instead:
 
 ```bash
-# Terminal 1 - backend
-set -a && source .env && set +a
-PATH="$(pwd)/.venv/bin:$PATH" uvicorn main:app --reload
-
-# Terminal 2 - frontend
-cd frontend
-npm run dev
-
-# Terminal 3 - cloudflare tunnel
-cloudflared tunnel --url http://localhost:8000
+make backend
+make frontend
+make tunnel
 ```
 
 ### 6. Register the Retell webhook
 
-Point Retell at:
+`make up` prints the tunnel URL. Point Retell at:
 
 `https://<your-tunnel>.trycloudflare.com/webhooks/retell`
 
-Or:
+Or apply it with:
 
 ```bash
-set -a && source .env && set +a
-PATH="$(pwd)/.venv/bin:$PATH" ./.cursor/skills/dev_environment/scripts/update_retell_webhook.py --tunnel-url "https://<your-tunnel>.trycloudflare.com" --apply
+make webhook TUNNEL_URL=https://<your-tunnel>.trycloudflare.com
 ```
+
+Set `AUTO_UPDATE_RETELL_WEBHOOK=1` in `.env` if you want `make up` to do this automatically.
 
 ### Verify
 
-- Backend health: http://127.0.0.1:8000/
+- Backend health: http://127.0.0.1:8000/ (`make health`)
 - API docs: http://127.0.0.1:8000/docs
 - Frontend: http://localhost:5173/
 
@@ -143,14 +135,14 @@ uv run pytest
 ### Stop services
 
 ```bash
-./.cursor/skills/dev_environment/scripts/dev_down.sh
-docker compose stop db
+make down
+make db-stop
 ```
 
 ### Troubleshooting
 
-- `uvicorn: not found` — use `PATH="$(pwd)/.venv/bin:$PATH"` or `uv run uvicorn ...`
-- Backend fails with `RETELL_API_KEY` missing — load env vars before startup: `set -a && source .env && set +a`
+- `uvicorn: not found` — run `make install`, or use `uv run uvicorn ...`
+- Backend fails with `RETELL_API_KEY` missing — put the key in `.env` at the project root (`make up` loads it)
 - Dev script says Postgres service not detected — compose service name is `db` in `docker-compose.yml`
 
 ## Demo recording
