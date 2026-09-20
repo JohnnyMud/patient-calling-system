@@ -12,8 +12,10 @@ import {
   type TranscriptMessage,
   type TranscriptSocketEvent,
 } from './api'
+import { AddPatientModal } from './components/AddPatientModal'
 import { CallHistory } from './components/CallHistory'
 import { LiveTranscript } from './components/LiveTranscript'
+import { LlmSettingsModal } from './components/LlmSettingsModal'
 import { PatientTable } from './components/PatientTable'
 
 function App() {
@@ -23,7 +25,9 @@ function App() {
   const [loadingPatients, setLoadingPatients] = useState(true)
   const [patientsError, setPatientsError] = useState<string | null>(null)
   const [deletingPatientId, setDeletingPatientId] = useState<string | null>(null)
+  const [addPatientOpen, setAddPatientOpen] = useState(false)
   const [startingCall, setStartingCall] = useState(false)
+  const [settingsOpen, setSettingsOpen] = useState(false)
   const [activeTranscriptCallId, setActiveTranscriptCallId] = useState<string | null>(null)
   const [transcriptMessages, setTranscriptMessages] = useState<TranscriptMessage[]>([])
   const [isEmergency, setIsEmergency] = useState(false)
@@ -246,24 +250,42 @@ function App() {
           </p>
         </div>
 
-        <button
-          type="button"
-          className="primary-button"
-          disabled={!selectedPatient || startingCall}
-          onClick={() => void handleStartCall()}
-        >
-          {startingCall ? 'Starting Call...' : 'Start Call'}
-        </button>
+        <div className="header-actions">
+          <button
+            type="button"
+            className="secondary-button"
+            onClick={() => setSettingsOpen(true)}
+          >
+            Settings
+          </button>
+          <button
+            type="button"
+            className="primary-button"
+            disabled={!selectedPatient || startingCall}
+            onClick={() => void handleStartCall()}
+          >
+            {startingCall ? 'Starting Call...' : 'Start Call'}
+          </button>
+        </div>
       </header>
 
       <section className="panel">
-        <div className="panel-header">
-          <h2>Patient List</h2>
-          <p>
-            {selectedPatient
-              ? `Selected: ${selectedPatient.first_name} ${selectedPatient.last_name}`
-              : 'Select a patient to enable Start Call.'}
-          </p>
+        <div className="panel-header panel-header-row">
+          <div>
+            <h2>Patient List</h2>
+            <p>
+              {selectedPatient
+                ? `Selected: ${selectedPatient.first_name} ${selectedPatient.last_name}`
+                : 'Select a patient to enable Start Call.'}
+            </p>
+          </div>
+          <button
+            type="button"
+            className="primary-button"
+            onClick={() => setAddPatientOpen(true)}
+          >
+            Add Patient
+          </button>
         </div>
 
         <PatientTable
@@ -277,6 +299,15 @@ function App() {
         />
       </section>
 
+      <AddPatientModal
+        open={addPatientOpen}
+        onClose={() => setAddPatientOpen(false)}
+        onCreated={(patient) => {
+          setPatients((current) => [...current, patient])
+          setSelectedPatientId(patient.id)
+        }}
+      />
+
       <LiveTranscript
         callId={activeTranscriptCallId}
         messages={transcriptMessages}
@@ -285,6 +316,8 @@ function App() {
       />
 
       <CallHistory attempts={callAttempts} />
+
+      <LlmSettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
     </main>
   )
 }

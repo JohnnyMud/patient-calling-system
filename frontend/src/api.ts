@@ -136,3 +136,74 @@ export async function deletePatient(patientId: string): Promise<void> {
 export function createTranscriptSocket(callId: string): WebSocket {
   return new WebSocket(`${WS_BASE}/websocket/live-transcript/${callId}`)
 }
+
+export type LlmProvider = 'openai' | 'gemini'
+
+export type LlmSettings = {
+  provider: LlmProvider
+  model: string
+  api_key_set: boolean
+  api_key_last4: string | null
+  updated_at: string | null
+}
+
+export type LlmSettingsUpdate = {
+  provider?: LlmProvider
+  model?: string
+  api_key?: string
+}
+
+export async function fetchLlmSettings(): Promise<LlmSettings> {
+  const response = await fetch(`${API_BASE}/settings/llm`)
+
+  if (!response.ok) {
+    throw new Error(await parseError(response))
+  }
+
+  return response.json() as Promise<LlmSettings>
+}
+
+export async function updateLlmSettings(
+  payload: LlmSettingsUpdate,
+): Promise<LlmSettings> {
+  const response = await fetch(`${API_BASE}/settings/llm`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+
+  if (!response.ok) {
+    throw new Error(await parseError(response))
+  }
+
+  return response.json() as Promise<LlmSettings>
+}
+
+export type PatientCreatePayload = {
+  first_name: string
+  last_name: string
+  date_of_birth: string
+  phone_number: string
+  home_address: string
+  insurance_number: string
+  medical_record_number: string
+  appointment_date: string
+  appointment_time: string
+  timezone: string
+}
+
+export async function createPatient(payload: PatientCreatePayload): Promise<Patient> {
+  const response = await fetch(`${API_BASE}/patients`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  })
+
+  if (!response.ok) {
+    throw new Error(await parseError(response))
+  }
+
+  return response.json() as Promise<Patient>
+}
